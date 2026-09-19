@@ -74,3 +74,33 @@ def test_virtual_env_failed_permission_error(monkeypatch):
         ve = VirtualEnv(["flask==2.0.1"])
         with pytest.raises(VirtualEnvError, match=r"^Couldn't execute in a temporary directory .+"):
             ve.create(ve_dir)
+
+
+def test_virtual_env_audits_requirements_already_satisfied_in_the_venv(monkeypatch):
+    """Requirements already present in the isolated venv must still be audited.
+
+    The venv is bootstrapped with `pip`, `wheel` and `setuptools` (the latter
+    pulling in `packaging`). Without `--ignore-installed`, `pip install
+    --dry-run --report` lists only what it *would* install, so those packages --
+    and anything resolving to a version already present -- are absent from the
+    report and never audited, while the run still reports success and exits 0.
+    """
+    original_run = _subprocess.run
+    seen = []
+
+    def run_mock(args, **kwargs):
+        if "--dry-run" in args:
+            seen.append(args)
+        return original_run(args, **kwargs)
+
+    monkeypatch.setattr(_virtual_env, "run", run_mock)
+
+    with TemporaryDirectory() as ve_dir:
+        ve = VirtualEnv(["packaging==24.0"])
+        ve.create(ve_dir)
+
+    assert seen, "the resolution command never ran"
+    assert "--ignore-installed" in seen[0], (
+        "resolution must pass --ignore-installed, or requirements already "
+        "satisfied in the isolated venv are silently dropped from the audit"
+    )

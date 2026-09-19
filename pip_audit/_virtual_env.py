@@ -158,6 +158,15 @@ class VirtualEnv(venv.EnvBuilder):
                 "--keyring-provider=subprocess",
                 *self._index_url_args,
                 "--dry-run",
+                # `--ignore-installed` is REQUIRED here, not an optimization.
+                # Without it, `--dry-run --report` lists only what pip *would install*,
+                # so any requirement already satisfied in this virtual environment is
+                # absent from the report and is therefore never audited. The venv is
+                # bootstrapped with `pip`, `wheel` and `setuptools` (which pulls in
+                # `packaging`), so those -- and any dependency resolving to the version
+                # already present -- were silently dropped from the audit while the run
+                # still reported success and exited 0.
+                "--ignore-installed",
                 "--report",
                 tmp.name,
                 *self._install_args,
